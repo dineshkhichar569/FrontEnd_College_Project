@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dynamic Table with Inline Editing</title>
+    <style>
+      body {
+        font: 14px/1.4 system-ui, Arial;
+        padding: 20px;
+        background: #f6f7fb;
+        color: #111;
+      }
+      h2 {
+        margin: 0 0 8px;
+      }
+      .wrap {
+        max-width: 900px;
+        margin: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      }
+      th,
+      td {
+        border: 1px solid #e6e7eb;
+        padding: 10px 12px;
+      }
+      th {
+        background: #f1f3f7;
+        text-align: left;
+      }
+      tr:nth-child(even) td {
+        background: #fcfdff;
+      }
+      td.editing {
+        padding: 0;
+      }
+      td.editing input {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        margin: 0;
+        padding: 10px 12px;
+        font: inherit;
+        box-sizing: border-box;
+      }
+      .bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 14px 0;
+      }
+      button {
+        padding: 8px 12px;
+        border: 0;
+        border-radius: 8px;
+        background: #111;
+        color: #fff;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #e8e9ef;
+        color: #111;
+      }
+      pre {
+        white-space: pre-wrap;
+        background: #0a0a0a;
+        color: #e7f0ff;
+        padding: 12px;
+        border-radius: 8px;
+        max-height: 260px;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+
+    <div class="wrap">
+      <h2>Dynamic Table with Inline Editing</h2>
+      <p>
+        Double-click any cell to edit. Press <strong>Enter</strong> to save,
+        <strong>Esc</strong> to cancel, or click outside to save.
+      </p>
+
+      <div class="bar">
+        <button id="add-row" class="secondary">+ Add Row</button>
+        <button id="save">Save Changes</button>
+        <span id="status" style="opacity: 0.7; color: green"></span>
+      </div>
+
+      <div id="table-container"></div>
+
+      <h3>Output</h3>
+      <pre id="output">Click “Save Changes” to see JSON here…</pre>
+    </div>
+
+    <script>
+      (() => {
+        let data = [
+          { id: 1, name: "Alice", role: "Developer", city: "Dehradun" },
+          { id: 2, name: "Bob", role: "Designer", city: "Delhi" },
+          { id: 3, name: "Cara", role: "Tester", city: "Pune" },
+        ];
+
+        const container = document.getElementById("table-container");
+        const output = document.getElementById("output");
+        const statusEl = document.getElementById("status");
+
+        const getColumns = () =>
+          Array.from(
+            data.reduce((s, row) => {
+              Object.keys(row).forEach((k) => s.add(k));
+              return s;
+            }, new Set())
+          );
+
+        function renderTable() {
+          const cols = getColumns();
+          const table = document.createElement("table");
+          const thead = document.createElement("thead");
+          const trh = document.createElement("tr");
+          cols.forEach((c) => {
+            const th = document.createElement("th");
+            th.textContent = c;
+            trh.appendChild(th);
+          });
+          thead.appendChild(trh);
+          table.appendChild(thead);
+
+          const tbody = document.createElement("tbody");
+          data.forEach((row, rIdx) => {
+            const tr = document.createElement("tr");
+            cols.forEach((col) => {
+              const td = document.createElement("td");
+              td.textContent = row[col] ?? "";
+              td.dataset.row = rIdx;
+              td.dataset.col = col;
+              td.addEventListener("dblclick", startEdit);
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+
+          container.innerHTML = "";
+          container.appendChild(table);
+        }
+
+        function startEdit(e) {
+          const td = e.currentTarget;
+          if (td.classList.contains("editing")) return;
+
+          td.classList.add("editing");
+          const oldVal = td.textContent;
+          const input = document.createElement("input");
+          input.value = oldVal;
+          td.textContent = "";
+          td.appendChild(input);
+          input.focus();
+          input.select();
+
+          const commit = () => finishEdit(td, input.value, oldVal);
+          const cancel = () => finishEdit(td, oldVal, oldVal, true);
+
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") commit();
+            if (ev.key === "Escape") cancel();
+          });
+          input.addEventListener("blur", commit);
+        }
+
+        function finishEdit(td, newVal, oldVal, canceled = false) {
+          if (!td.classList.contains("editing")) return;
+          const rowIdx = +td.dataset.row;
+          const colKey = td.dataset.col;
+
+          td.classList.remove("editing");
+          td.innerHTML = "";
+          td.textContent = newVal;
+
+          if (!canceled && data[rowIdx]) {
+            data[rowIdx][colKey] = coerce(newVal);
+            flashStatus(`Saved: row ${rowIdx + 1} • ${colKey} = "${newVal}"`);
+          } else if (canceled) {
+            flashStatus("Edit canceled");
+          }
+        }
+
+        function coerce(v) {
+          const n = Number(v);
+          return Number.isFinite(n) && v.trim() !== "" ? n : v;
+        }
+
+        document.getElementById("save").addEventListener("click", () => {
+          output.textContent = JSON.stringify(data, null, 2);
+          flashStatus("All changes saved to JSON output");
+          console.log("Updated data:", data);
+        });
+
+        document.getElementById("add-row").addEventListener("click", () => {
+          const cols = getColumns();
+          const blank = Object.fromEntries(cols.map((k) => [k, ""]));
+
+          if ("id" in blank) {
+            const max = Math.max(0, ...data.map((r) => Number(r.id) || 0));
+            blank.id = max + 1;
+          }
+          data.push(blank);
+          renderTable();
+          flashStatus("Row added");
+        });
+
+        function flashStatus(msg) {
+          statusEl.textContent = msg;
+          statusEl.style.transition = "none";
+          statusEl.style.opacity = "1";
+          setTimeout(() => {
+            statusEl.style.transition = "opacity .8s";
+            statusEl.style.opacity = ".0";
+          }, 1200);
+        }
+
+        renderTable();
+      })();
+    </script>
+  </body>
+</html>
