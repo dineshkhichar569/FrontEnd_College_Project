@@ -31,7 +31,7 @@ This project demonstrates core frontend concepts such as **DOM manipulation**, *
 
 1. Clone or download the repository:
    ```bash
-   git clone https://github.com/<your-username>/Dynamic-Table-Inline-Edit.git
+   git clone https://github.com/dineshkhichar569/FrontEnd_College_Project.git
 
 ## 🧾 License
 
